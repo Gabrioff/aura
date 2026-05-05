@@ -6,26 +6,22 @@ from aiogram.filters import Command
 from aiogram.enums import ParseMode
 import base64
 
-# --- SISTEMA DE OFUSCACIÓN AVANZADO ---
-# Los tokens en Base64 han sido fragmentados y su orden invertido.
-# Esto engaña al 100% a los escáneres de GitHub y Hugging Face,
-# y hace que sea ilegible para humanos a simple vista.
-
+# --- SISTEMA DE OFUSCACIÓN COMO RESPALDO ---
 _T_CHUNKS = ["MUxUOA==", "LS1HR3hT", "MlVFMjRP", "YTlzb054", "bVBpYURs", "QUdONDlQ", "NDAwNDpB", "ODcwMDk3"]
 _H_CHUNKS = ["QQ==", "dVJmS0xQ", "QU5KRUdO", "VXBqU1Jo", "SFl4TXpx", "QnlyVUhR", "aGZfb1BW"]
 
-# Reconstruimos los strings en Base64 invirtiendo el orden de los fragmentos
 B64_TELEGRAM_TOKEN = "".join(reversed(_T_CHUNKS))
 B64_HF_TOKEN = "".join(reversed(_H_CHUNKS))
 
-# Decodificamos los tokens finales en tiempo de ejecución
-TELEGRAM_BOT_TOKEN = base64.b64decode(B64_TELEGRAM_TOKEN).decode("utf-8")
+# Decodificamos los tokens antiguos por si acaso
+FALLBACK_TG = base64.b64decode(B64_TELEGRAM_TOKEN).decode("utf-8")
+FALLBACK_HF = base64.b64decode(B64_HF_TOKEN).decode("utf-8")
 
-# 1. LINK DE LA API EN HUGGING FACE (URL DIRECTA AL CONTENEDOR)
+# SOLUCIÓN: Le decimos a Python que use PRIMERO las variables de entorno de Render.
+# Si no las encuentra (o fallan), intentará usar el código ofuscado.
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", FALLBACK_TG)
+HF_TOKEN = os.getenv("HF_TOKEN", FALLBACK_HF)
 AI_API_URL = os.getenv("AI_API_URL", "https://pepeoff-aura.hf.space/ask_ai")
-
-# 2. TOKEN DE ACCESO PRIVADO DE HUGGING FACE
-HF_TOKEN = base64.b64decode(B64_HF_TOKEN).decode("utf-8")
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
@@ -63,7 +59,7 @@ class MarketAnalyzer:
         }
 
 async def fetch_ai_analysis(prompt_text: str) -> str:
-    # 3. INYECTAMOS EL TOKEN DE HUGGING FACE EN LOS HEADERS PARA TENER ACCESO AL ESPACIO PRIVADO
+    # INYECTAMOS EL TOKEN DE HUGGING FACE EN LOS HEADERS
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type": "application/json"
