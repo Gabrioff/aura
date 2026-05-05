@@ -158,8 +158,29 @@ async def analyze_crypto(message: types.Message):
 
     await status_msg.edit_text(final_report, parse_mode=ParseMode.MARKDOWN)
 
+# --- SERVIDOR WEB DUMMY PARA EVITAR EL ERROR DE RENDER ---
+async def handle_ping(request):
+    return web.Response(text="Bot de Telegram activo y funcionando.")
+
+async def init_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Render asigna el puerto dinámicamente en la variable PORT (usualmente 10000)
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"✅ Servidor web de respaldo iniciado en el puerto {port}")
+
 async def main():
+    # 1. Iniciamos el servidor web falso para que Render detecte el puerto y no reinicie la app
+    await init_web_server()
+    
     print("Iniciando polling de Telegram...")
+    # 2. Obligamos a Telegram a olvidar las instancias "fantasma" que se quedaron pegadas en el bucle
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
