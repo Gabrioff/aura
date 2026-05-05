@@ -5,17 +5,17 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
 
-# Obtenemos los tokens EXCLUSIVAMENTE de las variables de Render
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
 AI_API_URL = os.getenv("AI_API_URL", "https://pepeoff-aura.hf.space/ask_ai")
 
-# Validaciones de seguridad para que sepas exactamente qué falla
-if not TELEGRAM_BOT_TOKEN:
-    raise ValueError("❌ ERROR CRÍTICO: No se encontró TELEGRAM_TOKEN. Ve a Render -> Environment Variables y pega tu nuevo token de BotFather.")
+# La base de la URL para hacer las consultas del balance
+API_BASE_URL = AI_API_URL.replace("/ask_ai", "")
 
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("❌ ERROR CRÍTICO: No se encontró TELEGRAM_TOKEN.")
 if not HF_TOKEN:
-    print("⚠️ ADVERTENCIA: No se encontró HF_TOKEN en Render. La IA podría denegar el acceso.")
+    print("⚠️ ADVERTENCIA: No se encontró HF_TOKEN.")
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
@@ -52,41 +52,66 @@ class MarketAnalyzer:
             "fuerza_tendencia": trend_strength
         }
 
-async def fetch_ai_analysis(prompt_text: str) -> str:
-    # INYECTAMOS EL TOKEN DE HUGGING FACE EN LOS HEADERS
+async def fetch_api_data(endpoint: str, method: str = "GET", payload: dict = None) -> dict:
+    """Función maestra para comunicarse con Hugging Face usando el Token seguro"""
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type": "application/json"
     }
+    url = f"{API_BASE_URL}{endpoint}"
     
-    async with aiohttp.ClientSession(headers=headers) as session_api:
+    async with aiohttp.ClientSession(headers=headers) as session:
         try:
-            async with session_api.post(AI_API_URL, json={"prompt": prompt_text}, timeout=120) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("response", "Error extrayendo respuesta.")
-                elif response.status == 429:
-                    return "⏳ La IA está ocupada procesando otras peticiones. Intenta de nuevo."
-                elif response.status == 401:
-                    return "❌ Acceso denegado: El token de Hugging Face es inválido o caducó."
-                else:
-                    error_data = await response.text()
-                    return f"❌ Error de la IA (HTTP {response.status}): {error_data}"
+            if method == "POST":
+                async with session.post(url, json=payload, timeout=120) as response:
+                    return {"status": response.status, "data": await response.json() if response.status == 200 else await response.text()}
+            else:
+                async with session.get(url, timeout=30) as response:
+                    return {"status": response.status, "data": await response.json() if response.status == 200 else await response.text()}
         except Exception as e:
-            return f"❌ No se pudo conectar al servidor de la IA. Error: {e}"
+            return {"status": 500, "data": str(e)}
 
 @dp.message(Command("start"))
 async def send_welcome(message: types.Message):
+    # Registramos o leemos al usuario silenciosamente
+    await fetch_api_data(f"/balance/{message.from_user.id}")
+    
     await message.answer(
         "🤖 *Dark Analyst V2*\n"
-        "Escribe `/analizar BTCUSDT` o cualquier par de Binance.",
+        "Comandos disponibles:\n"
+        "🔹 `/p <moneda>` - Analizar. Ejemplo: `/p sol` o `/p btcusdt`\n"
+        "🔹 `/balance` - Ver tus fondos demo disponibles.",
         parse_mode=ParseMode.MARKDOWN
     )
 
-@dp.message(Command("analizar"))
+@dp.message(Command("balance"))
+async def check_balance(message: types.Message):
+    user_id = message.from_user.id
+    
+    # Extraemos el balance desde la base de datos central en HF
+    response = await fetch_api_data(f"/balance/{user_id}")
+    balance = 0.00
+    if response["status"] == 200:
+        balance = response["data"].get("balance", 0.00)
+
+    await message.answer(
+        f"💼 **CUENTA DEMO**\n\n"
+        f"💰 *Balance disponible:* `${balance:.2f} USD`\n\n"
+        f"_(Los fondos son simulados y almacenados en el cerebro de la IA)_",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+@dp.message(Command("p"))
 async def analyze_crypto(message: types.Message):
     args = message.text.split()
-    symbol = "SOLUSDT" if len(args) == 1 else args[1].upper()
+    
+    # Autocompletado inteligente de la moneda
+    if len(args) == 1:
+        symbol = "SOLUSDT"
+    else:
+        symbol = args[1].upper()
+        if not symbol.endswith("USDT") and not symbol.endswith("USD"):
+            symbol += "USDT"
 
     status_msg = await message.answer(f"🔄 **1.** Extrayendo datos de Binance para {symbol}...", parse_mode=ParseMode.MARKDOWN)
 
@@ -110,7 +135,15 @@ async def analyze_crypto(message: types.Message):
     3. Conclusión (Alcista/Bajista) con gestión de riesgo.
     """
 
-    ai_response = await fetch_ai_analysis(ai_prompt)
+    # Hacemos la petición a la IA mediante nuestra función maestra
+    ai_resp = await fetch_api_data("/ask_ai", method="POST", payload={"prompt": ai_prompt})
+    
+    if ai_resp["status"] == 200:
+        ai_response = ai_resp["data"].get("response", "Error extrayendo texto.")
+    elif ai_resp["status"] == 429:
+        ai_response = "⏳ La IA está ocupada procesando otras peticiones. Intenta de nuevo en unos segundos."
+    else:
+        ai_response = f"❌ Error de servidor (HTTP {ai_resp['status']}): {ai_resp['data']}"
 
     final_report = (
         f"📊 **REPORTE: {symbol}**\n\n"
