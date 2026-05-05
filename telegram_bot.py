@@ -4,24 +4,18 @@ import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
-import base64
 
-# --- SISTEMA DE OFUSCACIÓN COMO RESPALDO ---
-_T_CHUNKS = ["MUxUOA==", "LS1HR3hT", "MlVFMjRP", "YTlzb054", "bVBpYURs", "QUdONDlQ", "NDAwNDpB", "ODcwMDk3"]
-_H_CHUNKS = ["QQ==", "dVJmS0xQ", "QU5KRUdO", "VXBqU1Jo", "SFl4TXpx", "QnlyVUhR", "aGZfb1BW"]
-
-B64_TELEGRAM_TOKEN = "".join(reversed(_T_CHUNKS))
-B64_HF_TOKEN = "".join(reversed(_H_CHUNKS))
-
-# Decodificamos los tokens antiguos por si acaso
-FALLBACK_TG = base64.b64decode(B64_TELEGRAM_TOKEN).decode("utf-8")
-FALLBACK_HF = base64.b64decode(B64_HF_TOKEN).decode("utf-8")
-
-# SOLUCIÓN: Le decimos a Python que use PRIMERO las variables de entorno de Render.
-# Si no las encuentra (o fallan), intentará usar el código ofuscado.
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", FALLBACK_TG)
-HF_TOKEN = os.getenv("HF_TOKEN", FALLBACK_HF)
+# Obtenemos los tokens EXCLUSIVAMENTE de las variables de Render
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 AI_API_URL = os.getenv("AI_API_URL", "https://pepeoff-aura.hf.space/ask_ai")
+
+# Validaciones de seguridad para que sepas exactamente qué falla
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("❌ ERROR CRÍTICO: No se encontró TELEGRAM_TOKEN. Ve a Render -> Environment Variables y pega tu nuevo token de BotFather.")
+
+if not HF_TOKEN:
+    print("⚠️ ADVERTENCIA: No se encontró HF_TOKEN en Render. La IA podría denegar el acceso.")
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
