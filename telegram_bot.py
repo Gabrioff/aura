@@ -4,6 +4,7 @@ import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
+from aiohttp import web
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 HF_TOKEN = os.getenv("HF_TOKEN")
